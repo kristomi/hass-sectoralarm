@@ -1,6 +1,6 @@
 import logging
 
-from homeassistant.components.alarm_control_panel import AlarmControlPanel
+from homeassistant.components.alarm_control_panel import AlarmControlPanelEntity
 
 from homeassistant.components.alarm_control_panel.const import (
     SUPPORT_ALARM_ARM_AWAY,
@@ -29,7 +29,7 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     async_add_entities([SectorAlarmPanel(sector_hub, code, code_format)])
 
 
-class SectorAlarmPanel(AlarmControlPanel):
+class SectorAlarmPanel(AlarmControlPanelEntity):
     """
     Get the latest data from the Sector Alarm hub
     and arm/disarm alarm.
