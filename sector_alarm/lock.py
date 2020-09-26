@@ -1,10 +1,11 @@
 """
 """
+import datetime
 import logging
 
-from homeassistant.components.lock import LockEntity
+from homeassistant.components.lock import LockEntity, ATTR_CHANGED_BY
 from homeassistant.const import (ATTR_CODE, STATE_LOCKED, STATE_UNKNOWN,
-                                 STATE_UNLOCKED)
+                                 STATE_UNLOCKED, ATTR_FRIENDLY_NAME)
 
 import custom_components.sector_alarm as sector_alarm
 
@@ -22,32 +23,34 @@ async def async_setup_platform(hass,
     code = discovery_info[sector_alarm.CONF_CODE]
     code_format = discovery_info[sector_alarm.CONF_CODE_FORMAT]
 
-    locks = await sector_hub.get_locks()
+    locks = await sector_hub._async_sector.get_status()
+    locks = locks['Locks']
 
-    if locks is not None:
+    if locks:
         async_add_entities(
-            SectorAlarmLock(sector_hub, code, code_format, lock)
+            SectorAlarmLock(sector_hub, code, code_format, lock.get("Serial"), lock.get("Label"))
             for lock in locks)
 
 
 class SectorAlarmLock(LockEntity):
     """Representation of a Sector Alarm lock."""
 
-    def __init__(self, hub, code, code_format, serial):
+    def __init__(self, hub, code, code_format, serial, name=None):
         self._hub = hub
         self._serial = serial
         self._code = code
         self._code_format = code_format
+        self._name = name
 
     @property
     def name(self):
         """Return the serial of the lock."""
-        return self._serial
+        return self._name or self._serial
 
     @property
     def state(self):
         """Return the state of the lock."""
-        state = self._hub.lock_states[self._serial]
+        state = self._hub.lock_states[self._serial]["state"]
 
         if state == 'lock':
             return STATE_LOCKED
@@ -55,6 +58,17 @@ class SectorAlarmLock(LockEntity):
             return STATE_UNLOCKED
 
         return STATE_UNKNOWN
+
+    @property
+    def changed_by(self):
+        return self._hub.lock_states[self._serial].get("changed_by")
+
+    @property
+    def last_changed(self):
+        timestamp_str = self._hub.lock_states[self._serial].get("last_changed")
+        if timestamp_str:
+            return datetime.datetime.fromtimestamp(int(timestamp_str.lstrip("/Date(").rstrip(")/"))/1_000)
+        return None
 
     @property
     def available(self):
@@ -77,6 +91,14 @@ class SectorAlarmLock(LockEntity):
         if not check:
             _LOGGER.warning("Invalid code given")
         return check
+
+    @property
+    def state_attributes(self):
+        """Return the state attributes."""
+        return {ATTR_CHANGED_BY: self.changed_by,
+                "last_changed": self.last_changed,
+                "lock_id": self._serial,
+                }
 
     @property
     def is_locked(self):

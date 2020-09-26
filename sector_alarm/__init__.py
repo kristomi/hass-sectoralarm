@@ -72,7 +72,6 @@ async def async_setup(hass, config):
     thermometers = config[DOMAIN].get(CONF_THERMOMETERS, False)
     locks = config[DOMAIN].get(CONF_LOCKS, False)
 
-
     sector_data = SectorAlarmHub(async_sector, panel, thermometers, locks)
     await sector_data.update()
     hass.data[DATA_SA] = sector_data
@@ -81,7 +80,6 @@ async def async_setup(hass, config):
         hass.async_create_task(
             discovery.async_load_platform(hass, "sensor", DOMAIN, {}, config)
         )
-
 
     if locks:
         hass.async_create_task(
@@ -125,6 +123,8 @@ class SectorAlarmHub(object):
 
         self._lock_states = {}
 
+        self._history = []
+
         if panel:
             self._update_tasks.append(self._update_history)
         if thermometers:
@@ -144,18 +144,6 @@ class SectorAlarmHub(object):
     async def get_locks(self):
         return self._lock_states.keys()
 
-    async def _update_locks(self):
-        locks = await self._async_sector.get_locks()
-        _LOGGER.debug('Fetched locks: %s', locks)
-
-        if locks:
-            self._lock_states = {
-                lock['Serial']: lock['Status']
-                for lock in locks
-            }
-
-        return locks is not None
-
     @Throttle(MIN_TIME_BETWEEN_UPDATES)
     async def update(self):
         if self._failed:
@@ -171,13 +159,30 @@ class SectorAlarmHub(object):
             self._failed = True
             return
 
+    async def _update_locks(self):
+        if not self._lock_states:
+            locks = await self._async_sector.get_status()
+            locks = locks['Locks']
+            self._lock_states = {lock.get("Serial"): {"friendly_name": lock.get("Label")} for lock in locks}
+            self._lock_friendly_to_serial = {lock.get("Label"): lock.get("Serial") for lock in locks}
+
+        lock_hist = [h for h in self._history["LogDetails"] if h["EventType"] in ["lock", "unlock"]]
+        for lock_name, lock_serial in self._lock_friendly_to_serial.items():
+            for lock_hist_entry in (h for h in lock_hist if h["LockName"] == lock_name):
+                self._lock_states[lock_serial]["state"] = lock_hist_entry["EventType"]
+                self._lock_states[lock_serial]["changed_by"] = lock_hist_entry.get("User", "Unknown")
+                self._lock_states[lock_serial]["last_changed"] = lock_hist_entry["Time"]
+                break
+        return True
+
+
     async def _update_history(self):
         history = await self._async_sector.get_history()
         _LOGGER.debug("Fetched history: %s", history)
 
         if not history:
             return False
-
+        self._history = history
         for history_entry in history["LogDetails"]:
             if history_entry["EventType"] in ["armed", "partialarmed", "disarmed"]:
                 self._alarm_state = history_entry["EventType"]
