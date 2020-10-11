@@ -42,7 +42,7 @@ CONFIG_SCHEMA = vol.Schema(
                 vol.Optional(CONF_THERMOMETERS, default=False): cv.boolean,
                 vol.Optional(CONF_LOCKS, default=False): cv.boolean,
                 vol.Optional(CONF_ALARM_PANEL, default=True): cv.boolean,
-                vol.Optional(CONF_VERSION, default="v1_1_91"): cv.string,
+                vol.Optional(CONF_VERSION, default="v1_1_93"): cv.string,
             }
         )
     },
